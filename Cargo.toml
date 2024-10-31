@@ -5,3 +5,6 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.91"
+
+[dependencies-dev]
+lazy_static = "1.5.0"
