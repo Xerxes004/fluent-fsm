@@ -1,37 +1,25 @@
 use std::collections::HashMap;
 
-enum TransitionType<TEvent: Copy + Clone + Eq> {
+enum TransitionType<TEvent: Copy + Clone + PartialEq> {
     OnEnter,
     OnEvent(TEvent),
     OnExit,
 }
 
-pub struct StateMachineBuilder<
-    TState: Copy + Clone + Eq,
-    TEvent: Copy + Clone + Eq,
-    TGlobalState: Send + Sync = (),
-> {
+pub struct StateMachineBuilder<TState: Copy + Clone + PartialEq, TEvent: Copy + Clone + PartialEq> {
     working_with_state: TState,
-    current_machine: StateMachine<TState, TEvent, TGlobalState>,
+    current_machine: StateMachine<TState, TEvent>,
 }
 
-pub struct StateMachine<
-    TState: Copy + Clone + Eq,
-    TEvent: Copy + Clone + Eq,
-    TGlobalState: Send + Sync = (),
-> {
+pub struct StateMachine<TState: Copy + Clone + PartialEq, TEvent: Copy + Clone + PartialEq> {
     current_state: TState,
-    global_state: Option<TGlobalState>,
 
-    handlers: HashMap<
-        (TState, TEvent, TransitionType<TEvent>),
-        Vec<fn(TGlobalState) -> anyhow::Result<()>>,
-    >,
+    handlers: HashMap<(TState, TEvent, TransitionType<TEvent>), Vec<fn() -> anyhow::Result<()>>>,
     transitions: HashMap<(TState, TEvent), TState>,
 }
 
-impl<TState: Copy + Clone + Eq, TEvent: Copy + Clone + Eq, TGlobalState: Send + Sync>
-    StateMachineBuilder<TState, TEvent, TGlobalState>
+impl<TState: Copy + Clone + PartialEq, TEvent: Copy + Clone + PartialEq>
+    StateMachineBuilder<TState, TEvent>
 {
     pub fn create(initial_state: TState) -> Self {
         Self {
@@ -40,27 +28,23 @@ impl<TState: Copy + Clone + Eq, TEvent: Copy + Clone + Eq, TGlobalState: Send + 
         }
     }
 
-    pub fn on_enter(self, action: fn(TGlobalState) -> anyhow::Result<()>) {
+    pub fn on_enter(self, action: fn() -> anyhow::Result<()>) {
+        unimplemented!()
+    }
+
+    pub fn on(self, event: TEvent, action: fn() -> anyhow::Result<()>) {
         unimplemented!()
     }
 }
 
-impl<TState: Copy + Clone + Eq, TEvent: Copy + Clone + Eq, TGlobalState: Send + Sync>
-    StateMachine<TState, TEvent, TGlobalState>
+impl<TState: Copy + Clone + PartialEq, TEvent: Copy + Clone + PartialEq>
+    StateMachine<TState, TEvent>
 {
     fn create(initial_state: TState) -> Self {
         Self {
             current_state: initial_state,
-            global_state: None,
             handlers: HashMap::new(),
             transitions: HashMap::new(),
-        }
-    }
-
-    fn with_global_state(self, global_state: TGlobalState) -> Self {
-        Self {
-            global_state: Some(global_state),
-            ..self
         }
     }
 
@@ -68,11 +52,11 @@ impl<TState: Copy + Clone + Eq, TEvent: Copy + Clone + Eq, TGlobalState: Send + 
         todo!("move to builder")
     }
 
-    fn on_enter(self, state: TState, action: fn(TGlobalState) -> anyhow::Result<()>) -> Self {
+    fn on_enter(self, state: TState, action: fn() -> anyhow::Result<()>) -> Self {
         todo!("move to builder")
     }
 
-    fn on_exit(self, state: TState, action: fn(TGlobalState) -> anyhow::Result<()>) -> Self {
+    fn on_exit(self, state: TState, action: fn() -> anyhow::Result<()>) -> Self {
         todo!("move to builder")
     }
 
@@ -82,5 +66,33 @@ impl<TState: Copy + Clone + Eq, TEvent: Copy + Clone + Eq, TGlobalState: Send + 
 
     fn fire(&mut self, event: TEvent) -> anyhow::Result<()> {
         todo!("move to builder")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::tests::MyEvents::LiftLid;
+    use crate::StateMachineBuilder;
+
+    #[derive(Copy, Clone, PartialEq)]
+    enum MyStates {
+        Open,
+        Closed,
+    }
+
+    #[derive(Copy, Clone, PartialEq)]
+    enum MyEvents {
+        LiftLid,
+        ShutLid,
+    }
+
+    #[test]
+    fn test_basic_state_machine() {
+        let builder = StateMachineBuilder::create(MyStates::Closed).on(LiftLid, || {
+            println!("lift lid");
+            Ok(())
+        });
+
+        unimplemented!()
     }
 }
