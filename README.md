@@ -5,67 +5,56 @@ This crate was inspired by a C# library I use constantly called [Appccelerate St
 Fluent syntax is such a natural way to describe state machines. Defacing code with a hundred macro decorations
 and trait implementations is not.
 
-Here's how you create and use a state machine.
+Here's how you create and use a passive state machine.
 
 ```Rust
-use fluent_fsm::StateMachineBuilder;
-use lazy_static::lazy_static;
-use std::sync::{Arc, Mutex};
+use fluent_fsm::builder::*;
+use DoorEvents::*;
+use DoorStates::*;
 
-fn main()
-    let state = Arc::new(Mutex::new(String::from("hello")));
-    let on_event_state = Arc::clone(&state);
-    let on_enter_state = Arc::clone(&state);
-    let on_leave_state = Arc::clone(&state);
+#[derive(Eq, PartialEq, Copy, Clone, Hash)]
+enum DoorStates {
+    Closed,
+    Opened,
+}
 
-    lazy_static! {
-        static ref static_state: Arc<Mutex<&'static str>> =
-            Arc::new(Mutex::new("original static state"));
-    }
+#[derive(Eq, PartialEq, Copy, Clone, Hash)]
+enum DoorEvents {
+    OpenDoor,
+    CloseDoor,
+}
 
-    fn manipulate_static_state() -> anyhow::Result<()> {
-        let mut s = static_state.lock().unwrap();
-        *s = "manipulate static state!";
-        Ok(())
-    }
+struct DoorModel {
+    door_open: bool,
+}
 
-    let mut machine = StateMachineBuilder::create(0)
-        .on_enter(move || {
-            let mut g = on_enter_state.lock().unwrap();
-            assert_eq!("hello", *g);
-            g.push_str(" world");
-
-            Ok(())
+fn door_simulation() {
+    // Initial state: closed
+    let builder = StateMachineBuilder::create(Closed, DoorModel { door_open: false })
+        .on_enter_mut(|model: &mut DoorModel| {
+            model.door_open = false;
         })
-        .on_leave(move || {
-            let mut g = on_leave_state.lock().unwrap();
-            assert_eq!("hello world from", *g);
-            g.push_str(" state machine!");
-
-            Ok(())
+        .on(OpenDoor, || {
+            println!("opening door");
         })
-        .on(1, move || {
-            let mut g = on_event_state.lock().unwrap();
-            assert_eq!("hello world", *g);
-            g.push_str(" from");
-
-            Ok(())
+        .goto(Opened)
+        .in_state(Opened)
+        .on_enter_mut(|model: &mut DoorModel| {
+            model.door_open = true;
         })
-        .on(1, manipulate_static_state)
-        .goto(1)
-        .unwrap()
-        .build();
+        .on(CloseDoor, || {
+            println!("closing door");
+        })
+        .goto(Closed);
 
-    machine.start().expect("start failed");
+    let mut machine = builder.build();
+    machine.start();
 
-    assert_eq!(0, machine.current_state);
+    assert_eq!(machine.model().door_open, false);
 
-    machine.fire(1).expect("fire failed");
+    machine.fire(OpenDoor);
 
-    assert_eq!(1, machine.current_state);
-
-    assert_eq!("hello world from state machine!", *state.lock().unwrap());
-    assert_eq!("manipulate static state!", *static_state.lock().unwrap());
+    assert_eq!(machine.model().door_open, true);
 }
 ```
 
