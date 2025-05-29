@@ -1,14 +1,9 @@
 use crate::state_machine::PassiveStateMachine;
-use std::fmt::Display;
 use std::hash::Hash;
-
-type ClosureBox<T> = Box<dyn Fn(&mut T)>;
-type ClosureVec<T> = Vec<ClosureBox<T>>;
 
 pub struct StateMachineBuilder<TEvent: Eq + Hash + Copy, TState: Eq + Hash + Copy, TModel> {
     working_on_state: TState,
     working_on_event: Option<TEvent>,
-
     current_state_machine: PassiveStateMachine<TEvent, TState, TModel>,
 }
 
@@ -130,6 +125,7 @@ mod tests {
     use super::StateMachineBuilder;
     use crate::synchronous::tests::Events::{AddEgg, CloseBasket, OpenBasket, TakeEgg};
     use crate::synchronous::tests::States::{BasketClosed, BasketOpened};
+    use std::sync::{Arc, Mutex};
 
     #[derive(Eq, PartialEq, Copy, Clone, Hash)]
     enum States {
@@ -185,33 +181,35 @@ mod tests {
             .goto(BasketClosed);
 
         let mut machine = open_state_builder.build();
-
-        assert!(!machine.model().is_open);
-        assert_eq!(machine.model().eggs, 12);
-
         machine.start();
 
+        // Initial state -- closed basket with a dozen eggs
         assert!(!machine.model().is_open);
         assert_eq!(machine.model().eggs, 12);
 
+        // Try to add egg before it's open -- no change to egg count
         machine.fire(AddEgg);
 
         assert!(!machine.model().is_open);
         assert_eq!(machine.model().eggs, 12);
 
+        // Open basket
         machine.fire(OpenBasket);
 
         assert!(machine.model().is_open);
 
+        // Add egg to open basket
         machine.fire(AddEgg);
 
         assert_eq!(machine.model().eggs, 13);
 
+        // Remove two eggs from open basket
         machine.fire(TakeEgg);
         machine.fire(TakeEgg);
 
         assert_eq!(machine.model().eggs, 11);
 
+        // Close basket, restore egg count to one dozen upon exit
         machine.fire(CloseBasket);
 
         assert_eq!(machine.model().eggs, 12);
@@ -219,59 +217,98 @@ mod tests {
 
     #[test]
     fn test_state_machine_static() {
-        // let (tx, rx) = mpsc::channel();
-        //
-        // let tx_on_enter = tx.clone();
-        // let tx_on_leave = tx.clone();
-        // let tx_on_event = tx.clone();
-        //
-        // let builder = StateMachineBuilder::create(0u32, 0u32);
-        //
-        // let builder = builder
-        //     .on_enter(move || {
-        //         tx_on_enter
-        //             .send(1)
-        //             .with_context(|| "entering")
-        //     })
-        //     .on_leave(move || {
-        //         tx_on_leave
-        //             .send(3)
-        //             .with_context(|| "leaving")
-        //     })
-        //     .on(1, move || {
-        //         tx_on_event
-        //             .send(2)
-        //             .with_context(|| "sending OpenBasket")
-        //     })
-        //     .goto(BasketOpened).expect("transition already existed");
-        //
-        // let mut machine = builder.build();
-        //
-        // assert_eq!(machine.model().eggs, 0);
-        // assert_eq!(machine.model().candy, 0);
-        //
-        // machine.start().expect("failed to start");
-        //
-        // assert_eq!(machine.model().eggs, 12);
-        // assert_eq!(machine.model().candy, 0);
-        //
-        // machine.fire(OpenBasket).expect("failed to handle event");
-        //
-        // assert_eq!(machine.model().eggs, 10);
-        // assert_eq!(machine.model().candy, 10);
+        let builder = StateMachineBuilder::create(BasketClosed, ());
 
-        // let tx_on_enter = tx.clone();
-        // let tx_on_leave = tx.clone();
-        // let tx_on_event = tx.clone();
-        //
-        // let builder = builder.in_state(BasketOpened)
-        //     .on_enter(move || {
-        //         tx_on_enter.send("enter BasketClosed").with_context(|| "entering")
-        //     })
-        //     .on_enter_mut(|basket: &mut Basket| {
-        //         basket.eggs = 2;
-        //         basket.candy = 3;
-        //         Ok(())
-        //     })
+        let shared_model = Arc::new(Mutex::new(Basket {
+            is_open: false,
+            eggs: 12,
+        }));
+
+        let model1 = Arc::clone(&shared_model);
+        let model2 = Arc::clone(&shared_model);
+        let model3 = Arc::clone(&shared_model);
+        let model4 = Arc::clone(&shared_model);
+        let model5 = Arc::clone(&shared_model);
+
+        let closed_state_builder = builder
+            .on_enter(move || {
+                let mut basket = model1.lock().unwrap();
+                basket.is_open = false;
+            })
+            .on(OpenBasket, || {})
+            .goto(BasketOpened);
+
+        let open_state_builder = closed_state_builder
+            .in_state(BasketOpened)
+            .on_enter(move || {
+                let mut basket = model2.lock().unwrap();
+                basket.is_open = true;
+            })
+            .on(AddEgg, move || {
+                let mut basket = model3.lock().unwrap();
+                basket.eggs += 1;
+            })
+            .on(TakeEgg, move || {
+                let mut basket = model4.lock().unwrap();
+                basket.eggs -= 1;
+            })
+            .on_leave(move || {
+                let mut basket = model5.lock().unwrap();
+                basket.eggs = 12;
+            })
+            .on(CloseBasket, || {})
+            .goto(BasketClosed);
+
+        let mut machine = open_state_builder.build();
+        machine.start();
+
+        {
+            // Initial state -- closed basket with a dozen eggs
+            let model = shared_model.lock().unwrap();
+            assert!(!model.is_open);
+            assert_eq!(model.eggs, 12);
+        }
+
+        // Try to add egg before it's open -- no change to egg count
+        machine.fire(AddEgg);
+
+        {
+            let model = shared_model.lock().unwrap();
+            assert!(!model.is_open);
+            assert_eq!(model.eggs, 12);
+        }
+
+        // Open basket
+        machine.fire(OpenBasket);
+
+        {
+            let model = shared_model.lock().unwrap();
+            assert!(model.is_open);
+        }
+
+        // Add egg to open basket
+        machine.fire(AddEgg);
+
+        {
+            let model = shared_model.lock().unwrap();
+            assert_eq!(model.eggs, 13);
+        }
+
+        // Remove two eggs from open basket
+        machine.fire(TakeEgg);
+        machine.fire(TakeEgg);
+
+        {
+            let model = shared_model.lock().unwrap();
+            assert_eq!(model.eggs, 11);
+        }
+
+        // Close basket, restore egg count to one dozen upon exit
+        machine.fire(CloseBasket);
+
+        {
+            let model = shared_model.lock().unwrap();
+            assert_eq!(model.eggs, 12);
+        }
     }
 }

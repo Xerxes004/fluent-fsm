@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::sync::{Arc, Mutex};
 
 type ClosureBox<T> = Box<dyn Fn(&mut T)>;
 type ClosureVec<T> = Vec<ClosureBox<T>>;

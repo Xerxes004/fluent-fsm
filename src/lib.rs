@@ -1,3 +1,2 @@
-pub mod synchronous;
 mod state_machine;
-
+pub mod synchronous;
