@@ -1,4 +1,4 @@
-use crate::state_machine::PassiveStateMachine;
+use crate::machine::passive::PassiveStateMachine;
 use std::hash::Hash;
 
 pub struct StateMachineBuilder<TEvent: Eq + Hash + Copy, TState: Eq + Hash + Copy, TModel> {
@@ -123,8 +123,8 @@ impl<TEvent: Eq + Hash + Copy, TState: Eq + Hash + Copy, TModel>
 #[cfg(test)]
 mod tests {
     use super::StateMachineBuilder;
-    use crate::synchronous::tests::Events::{AddEgg, CloseBasket, OpenBasket, TakeEgg};
-    use crate::synchronous::tests::States::{BasketClosed, BasketOpened};
+    use crate::builder::tests::Events::{AddEgg, CloseBasket, OpenBasket, TakeEgg};
+    use crate::builder::tests::States::{BasketClosed, BasketOpened};
     use std::sync::{Arc, Mutex};
 
     #[derive(Eq, PartialEq, Copy, Clone, Hash)]
