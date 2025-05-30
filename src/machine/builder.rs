@@ -102,11 +102,12 @@ where
         builder
     }
 
-    /// Finalize building of the state machine, and move the state machine out of the builder
-    pub fn build(self) -> PassiveStateMachine<TEvent, TState, TModel> {
+    /// Create a passive state machine, finalizing the builder
+    pub fn build_passive(self) -> PassiveStateMachine<TEvent, TState, TModel> {
         self.current_state_machine
     }
 
+    /// Create an active state machine, finalizing the builder
     pub fn build_active(self) -> ActiveStateMachine<TEvent, TState, TModel> {
         ActiveStateMachine::create(self.current_state_machine)
     }

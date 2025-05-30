@@ -62,7 +62,7 @@ mod tests {
             .on(CloseBasket, || {})
             .goto(BasketClosed);
 
-        let mut machine = open_state_builder.build();
+        let mut machine = open_state_builder.build_passive();
         machine.start();
 
         // Initial state -- closed basket with a dozen eggs
@@ -141,7 +141,7 @@ mod tests {
             .on(CloseBasket, || {})
             .goto(BasketClosed);
 
-        let mut machine = open_state_builder.build();
+        let mut machine = open_state_builder.build_passive();
         machine.start();
 
         {

@@ -2,11 +2,46 @@
 
 This crate was inspired by a C# library I use constantly called [Appccelerate State Machine](https://github.com/appccelerate/statemachine).
 
-Fluent syntax is such a natural way to describe state machines. Defacing code with a hundred macro decorations
+Fluent syntax is a natural way to describe state machines. Defacing code with a hundred macro decorations
 and trait implementations is not.
 
 These state machines are defined using a builder, built, then started
 when ready to use.
+
+## Quickstart
+
+```rust
+use fluent_fsm::builder::*;
+use fluent_fsm::passive::*;
+
+fn make_machine() -> PassiveStateMachine<MyStates, MyEvents, MyModel>
+{
+    let builder = 
+        StateMachineBuilder::create(MyStates::Initial, MyModel::default())
+            .on_enter_mut(|model| model.in_initial_state = true)
+            .on(MyEvents::SomethingHappened, || { /* do stuff */ })
+            .goto(MyStates::AnotherState);
+    
+    builder.build_passive()
+}
+```
+
+See the tests in `lib.rs` for a simple example.
+
+## Describing a machine
+
+State machines have three generic type parameters that describe their functionality:
+
+```rust
+let game_engine: PassiveStateMachine<GameStates, GameEvents, GameModel>;
+```
+
+`TState` is the type which describes the finite states of the machine.
+
+`TEvent` is the type which describes an external event that the machine may handle.
+
+`TModel` is a representation of the internal state of the machine, and can be customized
+to whatever you desire. You can access this state with the `model()` method.
 
 ## The builder
 
@@ -17,7 +52,9 @@ The machine starts in an initial state, with an initial internal model. You can
 hook up closures or functions to run when a state is entered, exited, or an
 event happens when in that state.
 
-You can define transitions with the `goto` syntax.
+You can define transitions with the `goto` syntax. Whichever event was last mentioned in
+an `on` function call is the event that is in scope for the transition. The `goto` function
+can only be called once per event/state pair.
 
 ```rust
 // Assume the state machine is for a garage door.
@@ -43,11 +80,11 @@ builder
     .goto(DoorClosed);
 ```
 
-When the machine is defined, you can call `build()` or `build_active()`
+When the machine is defined, you can call `build_passive()` or `build_active()`
 to select the machine operation.
 
 ```rust
-let mut machine = builder.build();
+let mut machine = builder.build_passive();
 // or
 let mut machine = builder.build_active();
 
@@ -130,6 +167,7 @@ Contributions are welcome!
 
 Desired features:
 
+- Better examples
 - Recursive events
 - Async interface
 - Performance testing

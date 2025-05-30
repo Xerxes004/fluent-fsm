@@ -46,7 +46,7 @@ pub mod tests {
             })
             .goto(Closed);
 
-        let mut machine = builder.build();
+        let mut machine = builder.build_passive();
         machine.start();
 
         assert_eq!(machine.model().door_open, false);
