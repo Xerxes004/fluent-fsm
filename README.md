@@ -10,19 +10,30 @@ when ready to use.
 
 ## Quickstart
 
+Create your states, events, and model. States and events are usually an enum,
+and the model can be whatever you want. Then use the builder to describe your model.
+Finally, call the appropriate `build_*()` method to create the machine, and `start()` the
+machine when you're ready to start firing events. That's it!
+
 ```rust
 use fluent_fsm::builder::*;
 use fluent_fsm::passive::*;
 
-fn make_machine() -> PassiveStateMachine<MyStates, MyEvents, MyModel>
+fn main()
 {
     let builder = 
         StateMachineBuilder::create(MyStates::Initial, MyModel::default())
             .on_enter_mut(|model| model.in_initial_state = true)
             .on(MyEvents::SomethingHappened, || { /* do stuff */ })
-            .goto(MyStates::AnotherState);
-    
-    builder.build_passive()
+            .goto(MyStates::AnotherState)
+            .in_state(MyStates::AnotherState)
+            .on_enter_mut(|model| model.in_initial_state = false);
+
+    let mut machine = builder.build_passive();
+
+    assert!(machine.model().in_initial_state);
+    machine.fire(MyEvents::SomethingHappened);
+    assert!(!machine.model().in_initial_state);
 }
 ```
 
@@ -163,11 +174,16 @@ fn door_simulation() {
 
 ## Contributions &amp; new features
 
-Contributions are welcome!
+Contributions are welcome! Email me if you have any questions. Large features may
+need some careful consideration, so ask me before you spend a lot of time on
+them.
 
 Desired features:
 
+- Better documentation
 - Better examples
+- Static-only machines (no internal model)
+- Looser type restrictions
 - Recursive events
 - Async interface
 - Performance testing
