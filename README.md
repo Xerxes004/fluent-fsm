@@ -8,6 +8,16 @@ and trait implementations is not.
 These state machines are defined using a builder, built, then started
 when ready to use.
 
+## Features
+
+* Fluent syntax for machine description
+* No traits to implement -- machine can be defined, built, and started in one line of code
+* Define any number of actions for entry, exit, and event for every state
+* Built-in model manipulation
+* Passive (blocking) or active (non-blocking) state machine
+* No dependencies
+
+
 ## Quickstart
 
 Create your states, events, and model. States and events are usually an enum,
