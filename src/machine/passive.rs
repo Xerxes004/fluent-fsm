@@ -1,51 +1,26 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-type ClosureBox<T> = Box<dyn Fn(&mut T)>;
-type ClosureVec<T> = Vec<ClosureBox<T>>;
-
-#[derive(Debug, Copy, Clone)]
-pub enum MachineAction<TState: Copy + Clone, TEvent: Copy + Clone> {
-    Started {
-        initial_state: TState,
-    },
-    Entered {
-        from: TState,
-        to: TState,
-        because: TEvent,
-    },
-    Exited {
-        from: TState,
-        to: TState,
-        because: TEvent,
-    },
-    HandledEvent {
-        state: TState,
-        event: TEvent,
-    },
-    Errored {
-        state: TState,
-    },
-}
-
-pub struct PassiveStateMachine<
+pub struct PassiveStateMachine<TEvent, TState, TModel>
+where
     TEvent: Eq + Hash + Copy + Clone,
     TState: Eq + Hash + Copy + Clone,
-    TModel,
-> {
+{
     running: bool,
     current_state: TState,
     model: TModel,
 
-    on_event: HashMap<(TState, TEvent), ClosureVec<TModel>>,
-    on_enter: HashMap<TState, ClosureVec<TModel>>,
-    on_leave: HashMap<TState, ClosureVec<TModel>>,
+    on_event: HashMap<(TState, TEvent), Vec<Box<dyn Fn(&mut TModel) + 'static + Sync + Send>>>,
+    on_enter: HashMap<TState, Vec<Box<dyn Fn(&mut TModel) + 'static + Sync + Send>>>,
+    on_leave: HashMap<TState, Vec<Box<dyn Fn(&mut TModel) + 'static + Sync + Send>>>,
 
     transitions: HashMap<(TState, TEvent), TState>,
 }
 
-impl<TEvent: Eq + Hash + Copy, TState: Eq + Hash + Copy, TModel>
-    PassiveStateMachine<TEvent, TState, TModel>
+impl<TEvent, TState, TModel> PassiveStateMachine<TEvent, TState, TModel>
+where
+    TEvent: Eq + Hash + Copy,
+    TState: Eq + Hash + Copy,
 {
     pub(crate) fn new(initial_state: TState, model: TModel) -> Self {
         Self {
@@ -59,48 +34,49 @@ impl<TEvent: Eq + Hash + Copy, TState: Eq + Hash + Copy, TModel>
         }
     }
 
-    pub(crate) fn add_event_handler<F: 'static>(&mut self, state: TState, event: TEvent, func: F)
-    where
-        F: Fn(&mut TModel),
-    {
+    pub(crate) fn add_event_handler(
+        &mut self,
+        state: TState,
+        event: TEvent,
+        func: impl Fn(&mut TModel) + 'static + Sync + Send,
+    ) {
         let key = (state, event);
-        let handler: ClosureBox<TModel> = Box::new(func);
         match self.on_event.get_mut(&key) {
             Some(vec) => {
-                vec.push(handler);
+                vec.push(Box::new(func));
             }
             None => {
-                self.on_event.insert(key, vec![handler]);
+                self.on_event.insert(key, vec![Box::new(func)]);
             }
         }
     }
 
-    pub(crate) fn add_enter_handler<F: 'static>(&mut self, state: TState, func: F)
-    where
-        F: Fn(&mut TModel),
-    {
-        let handler: ClosureBox<TModel> = Box::new(func);
+    pub(crate) fn add_enter_handler(
+        &mut self,
+        state: TState,
+        func: impl Fn(&mut TModel) + 'static + Sync + Send,
+    ) {
         match self.on_enter.get_mut(&state) {
             Some(vec) => {
-                vec.push(handler);
+                vec.push(Box::new(func));
             }
             None => {
-                self.on_enter.insert(state, vec![handler]);
+                self.on_enter.insert(state, vec![Box::new(func)]);
             }
         }
     }
 
-    pub(crate) fn add_leave_handler<F: 'static>(&mut self, state: TState, func: F)
-    where
-        F: Fn(&mut TModel),
-    {
-        let handler: ClosureBox<TModel> = Box::new(func);
+    pub(crate) fn add_leave_handler(
+        &mut self,
+        state: TState,
+        func: impl Fn(&mut TModel) + 'static + Sync + Send,
+    ) {
         match self.on_leave.get_mut(&state) {
             Some(vec) => {
-                vec.push(handler);
+                vec.push(Box::new(func));
             }
             None => {
-                self.on_leave.insert(state, vec![handler]);
+                self.on_leave.insert(state, vec![Box::new(func)]);
             }
         }
     }

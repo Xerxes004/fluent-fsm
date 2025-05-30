@@ -1,3 +1,4 @@
+use crate::active::ActiveStateMachine;
 use crate::machine::passive::PassiveStateMachine;
 use std::hash::Hash;
 
@@ -7,8 +8,11 @@ pub struct StateMachineBuilder<TEvent: Eq + Hash + Copy, TState: Eq + Hash + Cop
     current_state_machine: PassiveStateMachine<TEvent, TState, TModel>,
 }
 
-impl<TEvent: Eq + Hash + Copy, TState: Eq + Hash + Copy, TModel>
-    StateMachineBuilder<TEvent, TState, TModel>
+impl<TEvent, TState, TModel> StateMachineBuilder<TEvent, TState, TModel>
+where
+    TEvent: Eq + Hash + Copy + Sync + Send + 'static,
+    TState: Eq + Hash + Copy + Sync + Send + 'static,
+    TModel: Sync + Send + 'static,
 {
     /// Create a state machine builder that starts in the given state
     pub fn create(initial_state: TState, initial_model: TModel) -> Self {
@@ -28,19 +32,15 @@ impl<TEvent: Eq + Hash + Copy, TState: Eq + Hash + Copy, TModel>
         }
     }
 
-    pub fn on_enter<F: 'static>(self, func: F) -> Self
-    where
-        F: Fn(),
-    {
-        let wrapper = move |_: &mut TModel| func();
-        self.on_enter_mut(wrapper)
+    pub fn on_enter(self, func: impl Fn() + 'static + Sync + Send) -> Self {
+        let mut builder = self;
+        let machine = &mut builder.current_state_machine;
+        machine.add_enter_handler(builder.working_on_state, move |_: &mut TModel| func());
+        builder
     }
 
     /// Run the given function when the state specified by `in_state` is entered
-    pub fn on_enter_mut<F: 'static>(self, func: F) -> Self
-    where
-        F: Fn(&mut TModel),
-    {
+    pub fn on_enter_mut(self, func: impl Fn(&mut TModel) + 'static + Sync + Send) -> Self {
         let mut builder = self;
 
         let machine = &mut builder.current_state_machine;
@@ -50,19 +50,13 @@ impl<TEvent: Eq + Hash + Copy, TState: Eq + Hash + Copy, TModel>
         builder
     }
 
-    pub fn on_leave<F: 'static>(self, func: F) -> Self
-    where
-        F: Fn(),
-    {
+    pub fn on_leave(self, func: impl Fn() + 'static + Sync + Send) -> Self {
         let wrapper = move |_: &mut TModel| func();
         self.on_leave_mut(wrapper)
     }
 
     /// Run the given function when the state specified by `in_state` is left
-    pub fn on_leave_mut<F: 'static>(self, func: F) -> Self
-    where
-        F: Fn(&mut TModel),
-    {
+    pub fn on_leave_mut(self, func: impl Fn(&mut TModel) + 'static + Sync + Send) -> Self {
         let mut builder = self;
 
         let machine = &mut builder.current_state_machine;
@@ -71,19 +65,13 @@ impl<TEvent: Eq + Hash + Copy, TState: Eq + Hash + Copy, TModel>
         builder
     }
 
-    pub fn on<F: 'static>(self, event: TEvent, func: F) -> Self
-    where
-        F: Fn(),
-    {
+    pub fn on(self, event: TEvent, func: impl Fn() + 'static + Sync + Send) -> Self {
         let wrapper = move |_: &mut TModel| func();
         self.on_mut(event, wrapper)
     }
 
     /// Run the given function when the event is fired in the state specified by `in_state`
-    pub fn on_mut<F: 'static>(self, event: TEvent, func: F) -> Self
-    where
-        F: Fn(&mut TModel),
-    {
+    pub fn on_mut(self, event: TEvent, func: impl Fn(&mut TModel) + 'static + Sync + Send) -> Self {
         let mut builder = self;
         builder.working_on_event = Some(event);
 
@@ -117,5 +105,9 @@ impl<TEvent: Eq + Hash + Copy, TState: Eq + Hash + Copy, TModel>
     /// Finalize building of the state machine, and move the state machine out of the builder
     pub fn build(self) -> PassiveStateMachine<TEvent, TState, TModel> {
         self.current_state_machine
+    }
+
+    pub fn build_active(self) -> ActiveStateMachine<TEvent, TState, TModel> {
+        ActiveStateMachine::create(self.current_state_machine)
     }
 }
