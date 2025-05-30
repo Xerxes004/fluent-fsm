@@ -5,3 +5,12 @@ version = 4
 [[package]]
 name = "fluent-fsm"
 version = "0.1.0"
+dependencies = [
+ "prompted",
+]
+
+[[package]]
+name = "prompted"
+version = "0.2.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d34cf5bf48e2fe6e11fb6b619fb5962530f1eaf278709de5f8ea49afa7379f9b"

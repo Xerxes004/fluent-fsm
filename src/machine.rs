@@ -5,9 +5,9 @@ pub mod passive;
 #[cfg(test)]
 mod tests {
     use super::builder::StateMachineBuilder;
-    use std::sync::{Arc, Mutex};
     use Events::{AddEgg, CloseBasket, OpenBasket, TakeEgg};
     use States::{BasketClosed, BasketOpened};
+    use std::sync::{Arc, Mutex};
 
     #[derive(Eq, PartialEq, Copy, Clone, Hash)]
     enum States {

@@ -9,3 +9,6 @@ homepage = "https://github.com/Xerxes004/fluent-fsm"
 repository = "https://github.com/Xerxes004/fluent-fsm"
 keywords = ["finite", "state", "machine", "fsm"]
 categories = ["data-structures", "simulation", "concurrency", "asynchronous"]
+
+[dev-dependencies]
+prompted = "0.2"

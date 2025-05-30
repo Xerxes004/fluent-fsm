@@ -1,7 +1,7 @@
 use crate::active::MachineCommand::*;
 use crate::passive::PassiveStateMachine;
 use std::hash::Hash;
-use std::sync::{mpsc, Arc, RwLock};
+use std::sync::{Arc, RwLock, mpsc};
 use std::thread;
 use std::thread::JoinHandle;
 
@@ -32,28 +32,30 @@ where
         let machine = Arc::new(RwLock::new(machine));
         let internal_state = Arc::clone(&machine);
 
-        let machine_loop = thread::spawn(move || loop {
-            match rx.try_recv() {
-                Ok(Start) => {
-                    let mut machine = machine.write().unwrap();
-                    machine.start();
+        let machine_loop = thread::spawn(move || {
+            loop {
+                match rx.try_recv() {
+                    Ok(Start) => {
+                        let mut machine = machine.write().unwrap();
+                        machine.start();
+                    }
+                    Ok(NewEvent(event)) => {
+                        let mut machine = machine.write().unwrap();
+                        machine.fire(event);
+                    }
+                    Ok(Stop) => {
+                        return;
+                    }
+                    Err(mpsc::TryRecvError::Empty) => {
+                        // Do nothing
+                    }
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        return;
+                    }
                 }
-                Ok(NewEvent(event)) => {
-                    let mut machine = machine.write().unwrap();
-                    machine.fire(event);
-                }
-                Ok(Stop) => {
-                    return;
-                }
-                Err(mpsc::TryRecvError::Empty) => {
-                    // Do nothing
-                }
-                Err(mpsc::TryRecvError::Disconnected) => {
-                    return;
-                }
-            }
 
-            thread::yield_now();
+                thread::yield_now();
+            }
         });
 
         Self {
