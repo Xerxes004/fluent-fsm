@@ -2,4 +2,7 @@
 name = "fluent-fsm"
 version = "0.1.0"
 edition = "2024"
-
+license = "MIT"
+description = "A simple way to create a state machine"
+homepage = "https://github.com/Xerxes004/fluent-fsm"
+repository = "https://github.com/Xerxes004/fluent-fsm"
