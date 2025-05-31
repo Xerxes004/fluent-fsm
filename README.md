@@ -1,17 +1,66 @@
-# Fluent FSM
+# fluent-fsm
 
-This crate was inspired by a C# library I use constantly called [Appccelerate State Machine](https://github.com/appccelerate/statemachine).
-
-Fluent syntax is a natural way to describe state machines. Defacing code with a hundred macro decorations
+Fluent syntax is a natural way to describe finite state machines. Defacing code with a hundred macro decorations
 and trait implementations is not.
 
-These state machines are defined using a builder, built, then started
-when ready to use. You can create a full state machine in one line of code!
+These state machines are defined using a builder, built, then started when ready to use. You can create a full state
+machine in one expression!
+
+```rust
+fn create_turnstile_fsm() -> PassiveStateMachine<States, Turnstile, Events> {
+    StateMachineBuilder::create(Locked, Turnstile::default())
+        .on_enter(|| println!("turnstile is locked"))
+        .on_mut(Coin, |model| {
+            model.coins += 1;
+            model.print_revenue()
+        })
+        .goto(Unlocked)
+        .on(Push, || {
+            println!("turnstile won't budge, maybe try inserting a coin")
+        })
+        .in_state(Unlocked)
+        .on_enter(|| println!("turnstile clicks"))
+        .on(Push, || println!("enjoy your ride!"))
+        .on_mut(Push, |model| {
+            model.riders += 1;
+            model.print_ridership();
+        })
+        .goto(Locked)
+        .on(Coin, || {
+            println!("you already paid! Try pushing on the turnstile.")
+        })
+        .build_passive()
+}
+```
+
+After the machine is built, start it, and then begin firing events to make it do stuff.
+
+```rust
+fn main() {
+    let mut machine = create_turnstile_fsm();
+
+    machine.start();
+
+    loop {
+        let action = input!("add a coin with (c) and push with (p): ");
+
+        match action.trim().to_lowercase().parse() {
+            Ok('c') => {
+                machine.fire(Coin);
+            }
+            Ok('p') => {
+                machine.fire(Push);
+            }
+            _ => continue,
+        };
+    }
+}
+```
 
 ## Features
 
 * Fluent syntax for machine description
-* No traits to implement -- machine can be defined, built, and started in one line of code
+* No traits to implement -- machine can be defined and built in one line of code
 * Define any number of actions for entry, exit, and event for every state
 * Built-in model manipulation
 * Passive (blocking) or active (non-blocking) state machine
@@ -20,195 +69,65 @@ when ready to use. You can create a full state machine in one line of code!
 
 ## Quickstart
 
-Create your states, events, and model. States and events are usually an enum,
-and the model can be whatever you want. Then use the builder to describe your model.
-Finally, call the appropriate `build_*()` method to create the machine, and `start()` the
-machine when you're ready to start firing events. That's it!
+These are general guidelines, but feel free to mix and match how you see fit. 
 
-```rust
-use fluent_fsm::builder::*;
-use fluent_fsm::passive::*;
+### Passive machines
 
-fn main()
-{
-    let builder = 
-        StateMachineBuilder::create(MyStates::Initial, MyModel::default())
-            .on_enter_mut(|model| model.in_initial_state = true)
-            .on(MyEvents::SomethingHappened, || { /* do stuff */ })
-            .goto(MyStates::AnotherState)
-            .in_state(MyStates::AnotherState)
-            .on_enter_mut(|model| model.in_initial_state = false);
+To see an example of a passive state machine, check out `examples/turnstile.rs`.
 
-    let mut machine = builder.build_passive();
+In general, passive machines rely on external events from `fire()` handled by `on()` and `on_mut()` followed by a `goto`
+to define transitions.
 
-    assert!(machine.model().in_initial_state);
-    machine.fire(MyEvents::SomethingHappened);
-    assert!(!machine.model().in_initial_state);
-}
-```
+The model is updated when events are fired, and transitions are based on fired events. This model is usually not shared
+in other scopes; the user fires an event, then checks the model to see what changed.
 
-See the tests in `lib.rs` for a simple example.
+### Active machines
 
-## Describing a machine
+To see an example of an active state machine, check out `examples/stoplight.rs`.
 
-State machines have three generic type parameters that describe their functionality:
-
-```rust
-let game_engine: PassiveStateMachine<GameStates, GameEvents, GameModel>;
-```
-
-`TState` is the type which describes the finite states of the machine.
-
-`TEvent` is the type which describes an external event that the machine may handle.
-
-`TModel` is a representation of the internal state of the machine, and can be customized
-to whatever you desire. You can access this state with the `model()` method.
-
-## The builder
-
-The `StateMachineBuilder` is a struct which uses fluent syntax to build up the
-state machine. 
-
-The machine starts in an initial state, with an initial internal model. You can
-hook up closures or functions to run when a state is entered, exited, or an
-event happens when in that state.
-
-You can define transitions with the `goto` syntax. Whichever event was last mentioned in
-an `on` function call is the event that is in scope for the transition. The `goto` function
-can only be called once per event/state pair.
-
-```rust
-// Assume the state machine is for a garage door.
-builder
-    .in_state(DoorClosing)
-    .on_enter(|| {
-        turn_on_light();
-        start_motors();
-    })
-    .on_enter_mut(|model: &mut GarageDoor| { 
-        model.closing = true;
-    })
-    .on_leave_mut(|model: &mut MyModel| {
-        model.closing = false;
-    })
-    .on(BeamTripped, || { 
-        emergency_open_door();
-    })
-    .goto(DoorOpening)
-    .on_mut(DoorAtBottom, |model: &mut MyModel| { 
-        model.closing = false;
-    })
-    .goto(DoorClosed);
-```
-
-When the machine is defined, you can call `build_passive()` or `build_active()`
-to select the machine operation.
-
-```rust
-let mut machine = builder.build_passive();
-// or
-let mut machine = builder.build_active();
-
-machine.start();
-```
-
-If you don't know which one to pick, start with passive.
-
-## The machine
-
-There are two ways to use the state machine: passive and active.
-
-The passive state machine handles events atomically. That is, when you fire an event
-with a passive state machine, it executes all events and transitions before
-`fire()` returns.
-
-The active state machine has a background thread which listens for new events using
-an `mpsc::channel()`. Fire returns immediately, and the events and transitions are handled
-whenever that thread gets around to it.
-
-## Example
-
-Here's how you create and use a passive state machine.
-
-```Rust
-use fluent_fsm::builder::*;
-use DoorEvents::*;
-use DoorStates::*;
-
-#[derive(Eq, PartialEq, Copy, Clone, Hash)]
-enum DoorStates {
-    Closed,
-    Opened,
-}
-
-#[derive(Eq, PartialEq, Copy, Clone, Hash)]
-enum DoorEvents {
-    OpenDoor,
-    CloseDoor,
-}
-
-struct DoorModel {
-    door_open: bool,
-}
-
-fn door_simulation() {
-    // Initial state: closed
-    let builder = StateMachineBuilder::create(Closed, DoorModel { door_open: false })
-        .on_enter_mut(|model: &mut DoorModel| {
-            model.door_open = false;
-        })
-        .on(OpenDoor, || {
-            println!("opening door");
-        })
-        .goto(Opened)
-        .in_state(Opened)
-        .on_enter_mut(|model: &mut DoorModel| {
-            model.door_open = true;
-        })
-        .on(CloseDoor, || {
-            println!("closing door");
-        })
-        .goto(Closed);
-
-    let mut machine = builder.build();
-    machine.start();
-
-    assert_eq!(machine.model().door_open, false);
-
-    machine.fire(OpenDoor);
-
-    assert_eq!(machine.model().door_open, true);
-}
-```
-
+In general, active machines rely on the current state and the state of the model to define transitions, handled by the 
+function passed to `create_active()`. This model is usually shared between scopes; the model is updated externally, then
+the state machine checks the model for what state to transition to next.
 
 ## Contributions &amp; new features
+
+This crate was inspired by a C# library I use constantly called [Appccelerate State Machine](https://github.com/appccelerate/statemachine).
+
+Author: [Wes Kelly](https://github.com/Xerxes004)
+
+### Contributors
 
 Contributions are welcome! Email me if you have any questions. Large features may
 need some careful consideration, so ask me before you spend a lot of time on
 them.
 
-Desired features:
+### Showcase
 
-- Better documentation
-- Better examples
-- Static-only machines (no internal model)
-- Looser type restrictions
+If you make something cool, please share it and I'll mention it here!
+
+### Desired features
+
 - Recursive events
-- Async interface
+- Error handling
+- More state/event introspection to aid in logging and debugging
+- Async interfaces
+- FFI interface
+- Better documentation
 - Performance testing
 
 
 ## Versioning
 
+Versions below 1.0.0 are considered to be fully experimental. Major things might change, including the license.
+
 **Major releases** mean interface changes and functionality changes. Don't
 switch between major versions unless you know why you want to.
 
-**Minor releases** keep the existing interface the same, but may have new
+**Minor releases** keep the existing interface the same, but may have additional
 methods, traits, or features. The functionality may also be slightly different
 behind the scenes, but should be non-intrusive.
 
 **Patch releases** are for fixing bugs, and none of the interface will change.
 
-Release candidates, alphas, and betas will follow the same convention, but may
-not be ready for production use.
+## Contributions
+
