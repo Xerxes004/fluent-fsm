@@ -61,7 +61,7 @@ fn main() {
 
 * Fluent syntax for machine description
 * No traits to implement -- machine can be defined and built in one line of code
-* Define any number of actions for entry, exit, and event for every state
+* Define any number of actions for entry, exit, and event for every state. Actions are executed in order of definition.
 * Built-in model manipulation
 * Passive (blocking) or active (non-blocking) state machine
 * No dependencies
@@ -91,9 +91,11 @@ the state machine checks the model for what state to transition to next.
 
 ## Contributions &amp; new features
 
-This crate was inspired by a C# library I use constantly called [Appccelerate State Machine](https://github.com/appccelerate/statemachine).
-
 Author: [Wes Kelly](https://github.com/Xerxes004)
+
+If you want me to add a new feature, email me and we can work something out.
+
+This crate was inspired by a C# library I use constantly called [Appccelerate State Machine](https://github.com/appccelerate/statemachine).
 
 ### Contributors
 
@@ -128,6 +130,3 @@ methods, traits, or features. The functionality may also be slightly different
 behind the scenes, but should be non-intrusive.
 
 **Patch releases** are for fixing bugs, and none of the interface will change.
-
-## Contributions
-
