@@ -2,17 +2,18 @@ use crate::active::ActiveStateMachine;
 use crate::machine::passive::PassiveStateMachine;
 use std::hash::Hash;
 
-pub struct StateMachineBuilder<TEvent: Eq + Hash + Copy, TState: Eq + Hash + Copy, TModel> {
+pub struct StateMachineBuilder<TState: Eq + Hash + Copy, TModel = (), TEvent: Eq + Hash + Copy = ()>
+{
     working_on_state: TState,
     working_on_event: Option<TEvent>,
-    current_state_machine: PassiveStateMachine<TEvent, TState, TModel>,
+    current_state_machine: PassiveStateMachine<TState, TModel, TEvent>,
 }
 
-impl<TEvent, TState, TModel> StateMachineBuilder<TEvent, TState, TModel>
+impl<TState, TModel, TEvent> StateMachineBuilder<TState, TModel, TEvent>
 where
-    TEvent: Eq + Hash + Copy + Sync + Send + 'static,
     TState: Eq + Hash + Copy + Sync + Send + 'static,
     TModel: Sync + Send + 'static,
+    TEvent: Eq + Hash + Copy + Sync + Send + 'static,
 {
     /// Create a state machine builder that starts in the given state
     pub fn create(initial_state: TState, initial_model: TModel) -> Self {
@@ -103,7 +104,7 @@ where
     }
 
     /// Create a passive state machine, finalizing the builder
-    pub fn build_passive(self) -> PassiveStateMachine<TEvent, TState, TModel> {
+    pub fn build_passive(self) -> PassiveStateMachine<TState, TModel, TEvent> {
         self.current_state_machine
     }
 
@@ -111,7 +112,7 @@ where
     pub fn build_active(
         self,
         tick: impl Fn(&TState, &TModel) -> Option<TState> + Send + Sync + 'static,
-    ) -> ActiveStateMachine<TEvent, TState, TModel> {
+    ) -> ActiveStateMachine<TState, TModel, TEvent> {
         ActiveStateMachine::create(tick, self.current_state_machine)
     }
 }

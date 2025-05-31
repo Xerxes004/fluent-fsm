@@ -59,7 +59,7 @@ fn main() {
     }
 }
 
-fn create_turnstile_fsm() -> PassiveStateMachine<Events, States, Turnstile> {
+fn create_turnstile_fsm() -> PassiveStateMachine<States, Turnstile, Events> {
     let locked_state_builder = StateMachineBuilder::create(Locked, Turnstile::default())
         .on_enter(|| println!("turnstile is locked"))
         .on_mut(Coin, |model| {

@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-pub struct PassiveStateMachine<TEvent, TState, TModel>
+pub struct PassiveStateMachine<TState, TModel = (), TEvent = ()>
 where
-    TEvent: Eq + Hash + Copy + Clone,
     TState: Eq + Hash + Copy + Clone,
+    TEvent: Eq + Hash + Copy + Clone,
 {
     running: bool,
     current_state: TState,
@@ -17,10 +17,10 @@ where
     transitions: HashMap<(TState, TEvent), TState>,
 }
 
-impl<TEvent, TState, TModel> PassiveStateMachine<TEvent, TState, TModel>
+impl<TState, TModel, TEvent> PassiveStateMachine<TState, TModel, TEvent>
 where
-    TEvent: Eq + Hash + Copy,
     TState: Eq + Hash + Copy,
+    TEvent: Eq + Hash + Copy,
 {
     pub(crate) fn new(initial_state: TState, model: TModel) -> Self {
         Self {
@@ -92,7 +92,7 @@ where
     pub fn model(&self) -> &TModel {
         &self.model
     }
-    
+
     pub fn model_mut(&mut self) -> &mut TModel {
         &mut self.model
     }

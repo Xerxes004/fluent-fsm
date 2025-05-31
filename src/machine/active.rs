@@ -1,8 +1,7 @@
 use crate::active::ActiveMachineEvent::*;
 use crate::passive::PassiveStateMachine;
-use std::collections::HashMap;
 use std::hash::Hash;
-use std::sync::{Arc, RwLock, mpsc};
+use std::sync::{mpsc, Arc, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
 
@@ -12,17 +11,17 @@ enum ActiveMachineEvent<T: Eq + Hash + Copy> {
     ExternalEvent(T),
 }
 
-pub struct ActiveStateMachine<TEvent, TState, TModel>
+pub struct ActiveStateMachine<TState, TModel = (), TEvent = ()>
 where
-    TEvent: Eq + Hash + Copy,
     TState: Eq + Hash + Copy,
+    TEvent: Eq + Hash + Copy,
 {
-    internal_state: Arc<RwLock<PassiveStateMachine<TEvent, TState, TModel>>>,
+    internal_state: Arc<RwLock<PassiveStateMachine<TState, TModel, TEvent>>>,
     machine_loop: JoinHandle<()>,
     tx: mpsc::Sender<ActiveMachineEvent<TEvent>>,
 }
 
-impl<TEvent, TState, TModel> ActiveStateMachine<TEvent, TState, TModel>
+impl<TState, TModel, TEvent> ActiveStateMachine<TState, TModel, TEvent>
 where
     TEvent: Eq + Hash + Copy + Sync + Send + 'static,
     TState: Eq + Hash + Copy + Sync + Send + 'static,
@@ -30,7 +29,7 @@ where
 {
     pub(crate) fn create(
         active_action: impl Fn(&TState, &TModel) -> Option<TState> + 'static + Send + Sync,
-        machine: PassiveStateMachine<TEvent, TState, TModel>,
+        machine: PassiveStateMachine<TState, TModel, TEvent>,
     ) -> Self {
         let (tx, rx) = mpsc::channel();
         let machine = Arc::new(RwLock::new(machine));
@@ -101,7 +100,6 @@ where
 mod tests {
     use super::super::builder::StateMachineBuilder;
     use super::*;
-    use std::sync::Mutex;
     use std::time::{Duration, SystemTime};
 
     struct Model<TState> {
@@ -134,30 +132,29 @@ mod tests {
         const STATE_2: u32 = 222;
         const MAX_TRANSITIONS: u32 = 5;
 
-        let builder =
-            StateMachineBuilder::<(), u32, Model<u32>>::create(STATE_1, Model::<u32>::new())
-                .on_enter_mut(|model| {
-                    model.in_state = STATE_1;
-                    model.num_transitions += 1;
-                    model.last_transition = SystemTime::now();
-                })
-                .on_leave_mut(|model| {
-                    model.prev_state = Some(STATE_1);
-                })
-                .in_state(STATE_2)
-                .on_enter_mut(|model| {
-                    model.in_state = STATE_2;
-                    model.num_transitions += 1;
-                    model.last_transition = SystemTime::now();
-                })
-                .on_leave_mut(|model| {
-                    model.prev_state = Some(STATE_2);
-                });
+        let builder = StateMachineBuilder::<u32, Model<u32>>::create(STATE_1, Model::<u32>::new())
+            .on_enter_mut(|model| {
+                model.in_state = STATE_1;
+                model.num_transitions += 1;
+                model.last_transition = SystemTime::now();
+            })
+            .on_leave_mut(|model| {
+                model.prev_state = Some(STATE_1);
+            })
+            .in_state(STATE_2)
+            .on_enter_mut(|model| {
+                model.in_state = STATE_2;
+                model.num_transitions += 1;
+                model.last_transition = SystemTime::now();
+            })
+            .on_leave_mut(|model| {
+                model.prev_state = Some(STATE_2);
+            });
 
         let machine = builder.build_active(tick);
         machine.start();
 
-        thread::sleep(Duration::from_secs(1));
+        thread::sleep(Duration::from_millis(50));
 
         assert_eq!(
             machine.read_state(|model| model.num_transitions),
@@ -170,14 +167,14 @@ mod tests {
             if model.num_transitions >= MAX_TRANSITIONS {
                 return None;
             }
-            
+
             match state {
                 &STATE_1 => {
                     if let Some(prev) = model.prev_state {
                         assert_eq!(prev, STATE_2)
                     }
 
-                    if model.time_since_last_transition() > Duration::from_millis(100) {
+                    if model.time_since_last_transition() > Duration::from_millis(5) {
                         Some(STATE_2)
                     } else {
                         None
@@ -186,7 +183,7 @@ mod tests {
                 &STATE_2 => {
                     assert_eq!(model.prev_state, Some(STATE_1));
 
-                    if model.time_since_last_transition() > Duration::from_millis(100) {
+                    if model.time_since_last_transition() > Duration::from_millis(5) {
                         Some(STATE_1)
                     } else {
                         None
