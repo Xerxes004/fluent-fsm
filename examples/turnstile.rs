@@ -82,7 +82,7 @@ fn main() {
 }
 
 fn create_turnstile_fsm() -> PassiveStateMachine<States, Turnstile, Events> {
-    let locked_state_builder = StateMachineBuilder::create(Locked, Turnstile::default())
+    StateMachineBuilder::create(Locked, Turnstile::default())
         .on_enter(|| println!("turnstile is locked"))
         .on_mut(Coin, |model| {
             model.coins += 1;
@@ -91,9 +91,7 @@ fn create_turnstile_fsm() -> PassiveStateMachine<States, Turnstile, Events> {
         .goto(Unlocked)
         .on(Push, || {
             println!("turnstile won't budge, maybe try inserting a coin")
-        });
-
-    let unlocked_state_builder = locked_state_builder
+        })
         .in_state(Unlocked)
         .on_enter(|| println!("turnstile clicks"))
         .on(Push, || println!("enjoy your ride!"))
@@ -104,7 +102,6 @@ fn create_turnstile_fsm() -> PassiveStateMachine<States, Turnstile, Events> {
         .goto(Locked)
         .on(Coin, || {
             println!("you already paid! Try pushing on the turnstile.")
-        });
-
-    unlocked_state_builder.build_passive()
+        })
+        .build_passive()
 }

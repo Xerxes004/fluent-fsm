@@ -6,7 +6,7 @@ Fluent syntax is a natural way to describe state machines. Defacing code with a 
 and trait implementations is not.
 
 These state machines are defined using a builder, built, then started
-when ready to use.
+when ready to use. You can create a full state machine in one line of code!
 
 ## Features
 
