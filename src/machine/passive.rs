@@ -85,8 +85,16 @@ where
         self.transitions.insert((from, on), to);
     }
 
+    pub fn current_state(&self) -> &TState {
+        &self.current_state
+    }
+
     pub fn model(&self) -> &TModel {
         &self.model
+    }
+    
+    pub fn model_mut(&mut self) -> &mut TModel {
+        &mut self.model
     }
 
     pub fn start(&mut self) {
@@ -117,18 +125,22 @@ where
 
         // If a transition happens, handle on-leave and on-enter
         if let Some(state) = self.transitions.get(&(self.current_state, event)) {
-            if let Some(actions) = self.on_leave.get(&(self.current_state)) {
-                for action in actions.iter() {
-                    action(&mut self.model);
-                }
+            self.goto(*state);
+        }
+    }
+
+    pub(crate) fn goto(&mut self, state: TState) {
+        if let Some(actions) = self.on_leave.get(&(self.current_state)) {
+            for action in actions.iter() {
+                action(&mut self.model);
             }
+        }
 
-            self.current_state = *state;
+        self.current_state = state;
 
-            if let Some(actions) = self.on_enter.get(&(self.current_state)) {
-                for action in actions.iter() {
-                    action(&mut self.model);
-                }
+        if let Some(actions) = self.on_enter.get(&(self.current_state)) {
+            for action in actions.iter() {
+                action(&mut self.model);
             }
         }
     }

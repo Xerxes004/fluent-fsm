@@ -1,14 +1,15 @@
-use crate::active::MachineCommand::*;
+use crate::active::ActiveMachineEvent::*;
 use crate::passive::PassiveStateMachine;
+use std::collections::HashMap;
 use std::hash::Hash;
 use std::sync::{Arc, RwLock, mpsc};
 use std::thread;
 use std::thread::JoinHandle;
 
-enum MachineCommand<T: Eq + Hash + Copy> {
+enum ActiveMachineEvent<T: Eq + Hash + Copy> {
     Start,
     Stop,
-    NewEvent(T),
+    ExternalEvent(T),
 }
 
 pub struct ActiveStateMachine<TEvent, TState, TModel>
@@ -18,7 +19,7 @@ where
 {
     internal_state: Arc<RwLock<PassiveStateMachine<TEvent, TState, TModel>>>,
     machine_loop: JoinHandle<()>,
-    tx: mpsc::Sender<MachineCommand<TEvent>>,
+    tx: mpsc::Sender<ActiveMachineEvent<TEvent>>,
 }
 
 impl<TEvent, TState, TModel> ActiveStateMachine<TEvent, TState, TModel>
@@ -27,7 +28,10 @@ where
     TState: Eq + Hash + Copy + Sync + Send + 'static,
     TModel: Sync + Send + 'static,
 {
-    pub(crate) fn create(machine: PassiveStateMachine<TEvent, TState, TModel>) -> Self {
+    pub(crate) fn create(
+        active_action: impl Fn(&TState, &TModel) -> Option<TState> + 'static + Send + Sync,
+        machine: PassiveStateMachine<TEvent, TState, TModel>,
+    ) -> Self {
         let (tx, rx) = mpsc::channel();
         let machine = Arc::new(RwLock::new(machine));
         let internal_state = Arc::clone(&machine);
@@ -39,7 +43,7 @@ where
                         let mut machine = machine.write().unwrap();
                         machine.start();
                     }
-                    Ok(NewEvent(event)) => {
+                    Ok(ExternalEvent(event)) => {
                         let mut machine = machine.write().unwrap();
                         machine.fire(event);
                     }
@@ -47,7 +51,11 @@ where
                         return;
                     }
                     Err(mpsc::TryRecvError::Empty) => {
-                        // Do nothing
+                        let mut machine = machine.write().unwrap();
+                        if let Some(state) = active_action(machine.current_state(), machine.model())
+                        {
+                            machine.goto(state);
+                        }
                     }
                     Err(mpsc::TryRecvError::Disconnected) => {
                         return;
@@ -66,7 +74,7 @@ where
     }
 
     pub fn fire(&self, event: TEvent) {
-        self.tx.send(NewEvent(event)).unwrap();
+        self.tx.send(ExternalEvent(event)).unwrap();
     }
 
     pub fn start(&self) {
@@ -76,6 +84,11 @@ where
     pub fn stop(self) {
         self.tx.send(Stop).unwrap();
         self.machine_loop.join().unwrap();
+    }
+
+    pub fn write_model(&mut self, update: impl Fn(&mut TModel) + Send + Sync + 'static) {
+        let mut model = self.internal_state.write().unwrap();
+        update(model.model_mut())
     }
 
     pub fn read_state<R>(&self, read: impl Fn(&TModel) -> R) -> R {
@@ -88,39 +101,99 @@ where
 mod tests {
     use super::super::builder::StateMachineBuilder;
     use super::*;
-    use std::time::Duration;
+    use std::sync::Mutex;
+    use std::time::{Duration, SystemTime};
+
+    struct Model<TState> {
+        in_state: TState,
+        num_transitions: u32,
+        prev_state: Option<TState>,
+        last_transition: SystemTime,
+    }
+
+    impl Model<u32> {
+        pub fn new() -> Self {
+            Self {
+                in_state: 0,
+                num_transitions: 0,
+                prev_state: None,
+                last_transition: SystemTime::now(),
+            }
+        }
+
+        pub fn time_since_last_transition(&self) -> Duration {
+            SystemTime::now()
+                .duration_since(self.last_transition)
+                .expect("time went backwards, please inform the nearest physicist")
+        }
+    }
 
     #[test]
     fn test_active_state_machine() {
-        let (tx, rx) = mpsc::channel();
-        let tx2 = tx.clone();
-        let add_and_send = move |num: &mut u32| {
-            *num += 1;
-            tx.send(*num).unwrap();
-        };
+        const STATE_1: u32 = 111;
+        const STATE_2: u32 = 222;
+        const MAX_TRANSITIONS: u32 = 5;
 
-        let builder = StateMachineBuilder::create(0, 0)
-            .on_enter_mut(add_and_send.clone())
-            .on_mut(123, add_and_send.clone())
-            .on_leave_mut(add_and_send.clone())
-            .goto(321)
-            .in_state(321)
-            .on_enter(move || tx2.send(0).unwrap());
+        let builder =
+            StateMachineBuilder::<(), u32, Model<u32>>::create(STATE_1, Model::<u32>::new())
+                .on_enter_mut(|model| {
+                    model.in_state = STATE_1;
+                    model.num_transitions += 1;
+                    model.last_transition = SystemTime::now();
+                })
+                .on_leave_mut(|model| {
+                    model.prev_state = Some(STATE_1);
+                })
+                .in_state(STATE_2)
+                .on_enter_mut(|model| {
+                    model.in_state = STATE_2;
+                    model.num_transitions += 1;
+                    model.last_transition = SystemTime::now();
+                })
+                .on_leave_mut(|model| {
+                    model.prev_state = Some(STATE_2);
+                });
 
-        let machine = builder.build_active();
+        let machine = builder.build_active(tick);
         machine.start();
 
-        assert_eq!(rx.recv_timeout(Duration::from_millis(1000)).unwrap(), 1);
-        assert_eq!(machine.read_state(|s| *s), 1);
+        thread::sleep(Duration::from_secs(1));
 
-        machine.fire(123);
+        assert_eq!(
+            machine.read_state(|model| model.num_transitions),
+            MAX_TRANSITIONS
+        );
 
-        assert_eq!(rx.recv_timeout(Duration::from_millis(1000)).unwrap(), 2);
-        assert_eq!(rx.recv_timeout(Duration::from_millis(1000)).unwrap(), 3);
-        assert_eq!(rx.recv_timeout(Duration::from_millis(1000)).unwrap(), 0);
+        machine.stop();
 
-        assert_eq!(machine.read_state(|s| *s), 3);
+        fn tick(state: &u32, model: &Model<u32>) -> Option<u32> {
+            if model.num_transitions >= MAX_TRANSITIONS {
+                return None;
+            }
+            
+            match state {
+                &STATE_1 => {
+                    if let Some(prev) = model.prev_state {
+                        assert_eq!(prev, STATE_2)
+                    }
 
-        machine.stop()
+                    if model.time_since_last_transition() > Duration::from_millis(100) {
+                        Some(STATE_2)
+                    } else {
+                        None
+                    }
+                }
+                &STATE_2 => {
+                    assert_eq!(model.prev_state, Some(STATE_1));
+
+                    if model.time_since_last_transition() > Duration::from_millis(100) {
+                        Some(STATE_1)
+                    } else {
+                        None
+                    }
+                }
+                v => panic!("unexpected state: {v}"),
+            }
+        }
     }
 }

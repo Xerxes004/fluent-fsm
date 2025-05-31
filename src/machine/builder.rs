@@ -108,7 +108,10 @@ where
     }
 
     /// Create an active state machine, finalizing the builder
-    pub fn build_active(self) -> ActiveStateMachine<TEvent, TState, TModel> {
-        ActiveStateMachine::create(self.current_state_machine)
+    pub fn build_active(
+        self,
+        tick: impl Fn(&TState, &TModel) -> Option<TState> + Send + Sync + 'static,
+    ) -> ActiveStateMachine<TEvent, TState, TModel> {
+        ActiveStateMachine::create(tick, self.current_state_machine)
     }
 }
